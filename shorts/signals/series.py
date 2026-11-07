@@ -5,7 +5,7 @@ import numpy as np
 
 
 def smooth(x: np.ndarray, win: int) -> np.ndarray:
-    if win <= 1:
+    if win <= 1 or len(x) == 0:
         return x
     k = np.ones(win) / win
     return np.convolve(x, k, mode="same")
