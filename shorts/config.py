@@ -17,6 +17,8 @@ DEFAULTS: dict[str, Any] = {
     "candidates": {"top_n": 30, "min_gap": 90, "chat_delay": 6, "before": 45, "after": 20},
     "select": {"max_moments": 12, "min_len": 15, "max_len": 59},
     "render": {"encoder": "h264_nvenc", "layout": "cam_top", "fps": 30, "width": 1080, "height": 1920},
+    # OAuth client (Desktop app) из Google Cloud Console; токен по умолчанию — work/.youtube_token.json
+    "youtube": {"client_secret": "client_secret.json", "token": "", "privacy": "private", "tags": []},
 }
 
 

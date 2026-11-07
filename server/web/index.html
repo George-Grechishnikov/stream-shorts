@@ -173,6 +173,7 @@ function jobPage(id) {
       <div class="row" style="justify-content:space-between"><b>Интерес по времени</b><span class="muted small">клик по графику — к моменту</span></div>
       <div class="chartbox"><canvas id="chart"></canvas></div>
     </div>
+    <div id="ytbox"></div>
     <div class="row" style="margin-top:18px;justify-content:space-between">
       <b id="mcount">Моменты</b>
       <span class="muted small" id="mstat"></span>
@@ -185,7 +186,9 @@ function jobPage(id) {
 
   async function load() {
     const j = await api(`/api/jobs/${id}`);
-    active = j.active.length > 0;
+    active = j.active.length > 0 || j.moments.some(m => m.upload && !m.upload.error);
+    const yb = j.moments.some(m => m.approved === true) ? youtubeBanner() : "";
+    if ($("#ytbox").innerHTML !== yb) $("#ytbox").innerHTML = yb;
     $("#title").textContent = j.title || j.meta?.title || j.id;
     $("#sub").innerHTML = `${esc(j.channel || j.meta?.channel || "")} · ${esc(j.id)} · ${j.meta?.duration ? hms(j.meta.duration) : ""} · <span class="badge ${j.status}">${STATUS_RU[j.status] || j.status}</span>`
       + (j.source_url?.startsWith("http") ? ` · <a href="${esc(j.source_url)}" target="_blank" rel="noopener">источник</a>` : "");
@@ -335,7 +338,40 @@ function jobPage(id) {
   return {destroy() { chart?.destroy(); }};
 }
 
-route();
+// ------------------------------------------------------------------ YouTube
+let yt = {configured: false, authorized: false};
+async function loadYoutube() { try { yt = await api("/api/youtube"); } catch {} return yt; }
+
+function youtubeBanner() {
+  if (yt.authorized) return "";
+  if (!yt.configured) return `<div class="card small muted" style="margin-top:14px">YouTube не настроен: положи OAuth-клиент Google (тип «Desktop app») в <code>${esc(yt.client_secret)}</code> — инструкция в начале <code>shorts/publish/youtube.py</code>.</div>`;
+  return `<div class="card small" style="margin-top:14px">Чтобы загружать одобренные ролики, <a href="/api/youtube/auth">подключи YouTube</a> (вход через Google).</div>`;
+}
+
+window.renderPublish = (box, m) => {
+  let html = "";
+  if (m.youtube_id) html = `<a href="https://youtu.be/${esc(m.youtube_id)}" target="_blank" rel="noopener">▶ на YouTube</a> <span class="muted small">(${esc(yt.privacy || "private")})</span>`;
+  else if (m.upload && !m.upload.error) html = `<span class="rendering">загрузка на YouTube ${Math.round(m.upload.progress * 100)}%</span>`;
+  else if (m.approved === true && m.video) {
+    html = yt.authorized ? `<button data-pub="1">⇪ Загрузить на YouTube</button><span class="muted small">как ${esc(yt.privacy || "private")}</span>`
+                         : `<span class="muted small">YouTube не подключён</span>`;
+    if (m.upload?.error) html += `<div class="err small">${esc(m.upload.error)}</div>`;
+  }
+  if (box.innerHTML !== html) box.innerHTML = html;
+};
+
+window.publish = async (jobId, c, update) => {
+  if (!confirm(`Загрузить «${c.m.title}» на YouTube как ${yt.privacy || "private"}?`)) return;
+  await api(`/api/jobs/${jobId}/moments/${c.m.id}/publish`, {method: "POST", body: {}});
+  update(c, {...c.m, upload: {progress: 0, error: null}});
+  toast("Загрузка началась");
+};
+
+const hq = new URLSearchParams(location.hash.split("?")[1] || "");
+if (hq.get("youtube") === "ok") setTimeout(() => toast("YouTube подключён"), 300);
+if (hq.get("youtube") === "error") setTimeout(() => toast("YouTube не подключился: " + (hq.get("msg") || ""), 6000), 300);
+
+loadYoutube().then(route);
 </script>
 </body>
 </html>

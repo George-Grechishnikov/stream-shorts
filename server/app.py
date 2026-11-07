@@ -10,15 +10,18 @@ import argparse
 import json
 import mimetypes
 import re
+import secrets
+import threading
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from shorts.config import load_config
 from shorts.jobs import STEPS
 from shorts.models import Word, load_json, save_json
+from shorts.publish import youtube
 from shorts.transcribe import words_between
 
 from .db import DB
@@ -36,6 +39,9 @@ def create_app(cfg: dict | None = None, db: DB | None = None) -> FastAPI:
 
     app = FastAPI(title="stream-shorts", docs_url="/api/docs", redoc_url=None)
     app.state.cfg, app.state.db = cfg, db
+    uploads: dict[tuple[str, str], dict] = {}     # (job, moment) → {"progress": 0..1, "error": str | None}
+    oauth: dict[str, tuple[str, str]] = {}         # state → (verifier, redirect_uri)
+    app.state.uploads, app.state.uploader = uploads, youtube.upload
 
     # ---------------------------------------------------------------- helpers
     def job_dir(job_id: str) -> Path:
@@ -184,6 +190,7 @@ def create_app(cfg: dict | None = None, db: DB | None = None) -> FastAPI:
                 "title": r["title"], "hook": r["hook"], "score": r["score"], "reason": r["reason"],
                 "approved": None if r["approved"] is None else bool(r["approved"]),
                 "youtube_id": r["youtube_id"], "rendering": r["moment_id"] in busy,
+                "upload": uploads.get((job_id, r["moment_id"])),
                 "video": f"/files/{job_id}/renders/{r['moment_id']}.mp4?v={int(rp.stat().st_mtime)}" if rp.exists() else None,
                 "thumb": f"/files/{job_id}/renders/{r['moment_id']}.jpg" if (d / "renders" / f"{r['moment_id']}.jpg").exists() else None,
                 "text": " ".join(w["text"] for w in fm.get("words", []))[:400],
@@ -226,6 +233,79 @@ def create_app(cfg: dict | None = None, db: DB | None = None) -> FastAPI:
             db.set_moment(job_id, mid, start=m["start"], end=m["end"])
         tid = db.enqueue(job_id, "rerender", moments=[mid], force=True)
         return {"task": tid, "moment": next(x for x in moments_view(job_id) if x["id"] == mid)}
+
+    # ---------------------------------------------------------------- YouTube
+    @app.get("/api/youtube")
+    def youtube_status() -> dict:
+        secret, token = youtube.paths(cfg)
+        return {"configured": secret.exists(), "authorized": token.exists(), "client_secret": str(secret),
+                "privacy": (cfg.get("youtube") or {}).get("privacy", "private")}
+
+    @app.get("/api/youtube/auth")
+    def youtube_auth(request: Request) -> RedirectResponse:
+        secret, _ = youtube.paths(cfg)
+        try:
+            client = youtube.load_client(secret)
+        except youtube.YouTubeError as e:
+            raise HTTPException(400, str(e)) from None
+        verifier, challenge = youtube.pkce()
+        state = secrets.token_urlsafe(16)
+        # Google разрешает desktop-клиентам loopback-редирект на любой порт 127.0.0.1
+        redirect = f"http://127.0.0.1:{request.url.port or 80}/api/youtube/callback"
+        oauth[state] = (verifier, redirect)
+        return RedirectResponse(youtube.auth_url(client, redirect, state, challenge))
+
+    @app.get("/api/youtube/callback")
+    def youtube_callback(state: str = "", code: str = "", error: str = "") -> RedirectResponse:
+        if error or state not in oauth:
+            return RedirectResponse(f"/#/?youtube=error&msg={error or 'state'}")
+        verifier, redirect = oauth.pop(state)
+        secret, token = youtube.paths(cfg)
+        try:
+            youtube.exchange_code(youtube.load_client(secret), code, redirect, verifier, token)
+        except youtube.YouTubeError as e:
+            return RedirectResponse(f"/#/?youtube=error&msg={str(e)[:200]}")
+        return RedirectResponse("/#/?youtube=ok")
+
+    @app.post("/api/jobs/{job_id}/moments/{mid}/publish", status_code=202)
+    def publish(job_id: str, mid: str, payload: Annotated[dict | None, Body()] = None) -> dict:
+        payload = payload or {}
+        m = moment_or_404(job_id, mid)
+        if m["youtube_id"]:
+            raise HTTPException(409, f"уже загружен: https://youtu.be/{m['youtube_id']}")
+        if m["approved"] != 1:
+            raise HTTPException(409, "сначала одобри момент")
+        key = (job_id, mid)
+        if uploads.get(key, {}).get("error") is None and key in uploads:
+            raise HTTPException(409, "уже загружается")
+        video = job_dir(job_id) / "renders" / f"{mid}.mp4"
+        if not video.exists():
+            raise HTTPException(409, "нет рендера")
+        secret, token = youtube.paths(cfg)
+        if not secret.exists() or not token.exists():
+            raise HTTPException(409, "YouTube не подключён")
+        ycfg = cfg.get("youtube") or {}
+        privacy = payload.get("privacy") or ycfg.get("privacy", "private")
+        if privacy not in youtube.PRIVACY:
+            raise HTTPException(400, f"privacy: {youtube.PRIVACY}")
+        meta = read_json(job_dir(job_id) / "meta.json", {})
+        desc = payload.get("description") or (f"Со стрима {meta.get('channel')}" if meta.get("channel") else "")
+        tags = list(ycfg.get("tags") or []) + ([meta["channel"]] if meta.get("channel") else [])
+        uploads[key] = {"progress": 0.0, "error": None}
+
+        def work_() -> None:
+            def prog(f: float) -> None:
+                uploads[key]["progress"] = round(f, 3)
+
+            try:
+                vid = app.state.uploader(video, m["title"], desc, tags, privacy=privacy, cfg=cfg, progress=prog)
+                db.set_moment(job_id, mid, youtube_id=vid)
+                uploads.pop(key, None)
+            except Exception as e:  # noqa: BLE001 — показываем в карточке
+                uploads[key] = {"progress": uploads[key]["progress"], "error": str(e)}
+
+        threading.Thread(target=work_, daemon=True, name=f"upload-{mid}").start()
+        return {"started": True, "privacy": privacy}
 
     # ---------------------------------------------------------------- файлы
     @app.get("/files/{job_id}/{path:path}")
