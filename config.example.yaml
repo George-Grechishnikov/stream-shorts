@@ -1,0 +1,35 @@
+# Скопируй в config.yaml и заполни
+work_dir: work
+keep_source: true
+twitch:
+  client_id: ""        # dev.twitch.tv/console → Register Your Application (для клипов через Helix API)
+  client_secret: ""
+tools:
+  ffmpeg: ffmpeg
+  ffprobe: ffprobe
+  twitch_downloader: tools/TwitchDownloaderCLI.exe
+whisper:
+  model: large-v3      # на GTX 1660 Ti: large-v3 + int8_float16 ≈ 3-4 ГБ VRAM
+  device: cuda         # cpu, если нет NVIDIA
+  compute_type: int8_float16
+  language: ru
+llm:
+  provider: none       # anthropic | openai | none
+  model: ""            # напр. claude-sonnet-4-5 / gpt-4.1-mini
+  api_key_env: ANTHROPIC_API_KEY
+candidates:
+  top_n: 30
+  min_gap: 90
+  chat_delay: 6
+  before: 45
+  after: 20
+select:
+  max_moments: 12
+  min_len: 15
+  max_len: 59
+render:
+  encoder: h264_nvenc  # libx264 без NVIDIA
+  layout: cam_top      # cam_top | blur_bg | full_crop
+  fps: 30
+  width: 1080
+  height: 1920

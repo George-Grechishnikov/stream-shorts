@@ -1,0 +1,11 @@
+{
+ "id": "demo",
+ "url": "demo.mp4",
+ "channel": "demo",
+ "title": "Демо-стрим",
+ "duration": 139.333333,
+ "created_at": "",
+ "width": 1920,
+ "height": 1080,
+ "fps": 30.0
+}

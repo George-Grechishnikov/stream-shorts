@@ -1,0 +1,38 @@
+[
+ {
+  "start": 0.0,
+  "end": 29.0,
+  "peak": 19.0,
+  "score": 21.93,
+  "reasons": {
+   "chat_rate": 6.0,
+   "chat_users": 4.2,
+   "emote_hype": 12.0,
+   "loudness": 0.69
+  }
+ },
+ {
+  "start": 42.0,
+  "end": 72.0,
+  "peak": 62.0,
+  "score": 21.52,
+  "reasons": {
+   "chat_rate": 6.0,
+   "chat_users": 4.2,
+   "emote_hype": 12.0,
+   "loudness": 0.99
+  }
+ },
+ {
+  "start": 99.0,
+  "end": 129.0,
+  "peak": 119.0,
+  "score": 20.3,
+  "reasons": {
+   "chat_rate": 6.0,
+   "chat_users": 4.2,
+   "emote_hype": 12.0,
+   "loudness": 0.19
+  }
+ }
+]

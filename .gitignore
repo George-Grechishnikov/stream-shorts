@@ -1,0 +1,9 @@
+work/
+tools/
+config.yaml
+client_secret*.json
+.venv/
+__pycache__/
+*.pyc
+.env
+.ruff_cache/

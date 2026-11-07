@@ -1,0 +1,13 @@
+{
+ "id": "job_demo",
+ "steps": {
+  "ingest": "done",
+  "signals": "done",
+  "candidates": "done",
+  "transcribe": "done",
+  "select": "done",
+  "render": "done"
+ },
+ "updated_at": "2026-11-07T23:33:25",
+ "source": "demo.mp4"
+}
