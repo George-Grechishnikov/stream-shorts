@@ -10,8 +10,10 @@
 
 ## Команды
 ```
+scripts\setup_windows.ps1 [-NoProxy] [-Cpu]  # установка (идемпотентна)
+scripts\run.ps1                              # воркер + панель http://127.0.0.1:8000 (лог воркера: work\worker.log)
 .venv\Scripts\activate
-python -m shorts run <vod-url | файл>        # весь конвейер → work/<job>/renders/
+python -m shorts run <vod-url | файл>        # весь конвейер без панели → work/<job>/renders/
 python -m shorts step <job> <шаг> --force    # ingest|signals|candidates|transcribe|select|render
 python -m shorts render <job> [moment_id...] # перерендер
 ruff check . ; python -m pytest -q
@@ -45,9 +47,21 @@ ingest (yt-dlp аудио, TwitchDownloaderCLI чат, Helix клипы) → sig
   `--noproxy "*"`. large-v3 лежит в `%USERPROFILE%\.cache\whisper\faster-whisper-large-v3`, путь — в `config.yaml`.
 - Нет `gh` и не задано `git user.name/email` (коммиты — через `git -c user.name=... -c user.email=...`).
 
+## Сервер (server/) и публикация
+- `server/db.py` — SQLite `work/shorts.db`: jobs, moments (approved/title/youtube_id — решения пользователя,
+  переживают пересинхронизацию moments.json), tasks (очередь run/rerender).
+- `server/queue.py` — воркер: задачи по одной; каждый шаг = `pipeline.run(..., steps=[step])` в дочернем
+  процессе (spawn), отмена = taskkill /T. Задачи из CLI подхватываются из `work/*/job.json`.
+- `server/app.py` + `server/web/index.html` — FastAPI + одна страница (fetch, Chart.js с jsdelivr).
+  Загрузка на YouTube — в потоке панели, не в очереди воркера (иначе ждала бы GPU-задачи).
+- `shorts/publish/youtube.py` — OAuth desktop (PKCE, loopback на панель), resumable upload на requests.
+  **Реально на YouTube не проверено** — у автора ещё нет `client_secret.json`; тесты — на поддельном HTTP.
+- `.ps1` сохранять в UTF-8 **с BOM** (PowerShell 5.1 иначе ломает кириллицу); код в `python -c` из PS 5.1
+  теряет кавычки — писать во временный файл.
+
 ## Разделение работы
-- **Codex сейчас не работает** — задачи C1–C5 из `docs/CODEX_TASKS.md` делает Claude Code (8 ноя 2026, по просьбе автора).
-  Порядок: C5, C4, C1 → C2 → C3. Правила из `AGENTS.md` (контракт, ruff, pytest без GPU и сети) действуют и для Claude.
+- **Codex сейчас не работает** — задачи C1–C5 из `docs/CODEX_TASKS.md` сделал Claude Code (8 ноя 2026, по просьбе
+  автора), ветка `claude/codex-tasks`. Правила из `AGENTS.md` (контракт, ruff, pytest без GPU и сети) действуют и для Claude.
 - **Claude Code** (здесь, на ноутбуке): реальные прогоны на GPU, отладка конвейера (`shorts/`), задачи C1–C5.
 - Правки конвейера — отдельными коммитами.
 

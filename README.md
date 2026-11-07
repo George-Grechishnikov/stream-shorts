@@ -2,27 +2,47 @@
 
 Нарезка Shorts/TikTok из стримов Twitch и длинных видео: находит самые интересные моменты (клипы зрителей, всплески чата, громкость, смысл речи) и монтирует вертикальные ролики 9:16 с субтитрами.
 
-Подробно — в [docs/SPEC.md](docs/SPEC.md). Задачи для Codex — в [docs/CODEX_TASKS.md](docs/CODEX_TASKS.md).
+Подробно — в [docs/SPEC.md](docs/SPEC.md). План задач C1–C5 — в [docs/CODEX_TASKS.md](docs/CODEX_TASKS.md) (все сделаны).
 
 ## Быстрый старт (Windows)
 
-1. Поставь Python 3.11+ и ffmpeg: `winget install Gyan.FFmpeg`.
-2. Скачай [TwitchDownloaderCLI](https://github.com/lay295/TwitchDownloader/releases) и положи `TwitchDownloaderCLI.exe` в `tools/` — через него качается чат.
-3. Установи зависимости:
+1. Установка — одна команда (ставит Python и ffmpeg через winget, если их нет; venv, зависимости,
+   CUDA для whisper, TwitchDownloaderCLI, модель whisper ~3 ГБ, `config.yaml`):
    ```
-   python -m venv .venv && .venv\Scripts\activate
-   pip install -r requirements.txt
+   powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
    ```
-   Для GPU (GTX/RTX) faster-whisper нужны CUDA-библиотеки: `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*`.
-4. `copy config.example.yaml config.yaml`, затем при желании впиши:
-   - `twitch.client_id` / `client_secret` (dev.twitch.tv → Your Console → Register Your Application) — для клипов;
-   - `llm.provider` + API-ключ в переменной окружения — для умного отбора и названий.
-5. Запусти:
+   Ключи: `-NoProxy` — если локальный прокси рвёт загрузку с PyPI/Hugging Face; `-Cpu` — без NVIDIA;
+   `-Model medium` — модель полегче.
+2. Запуск — воркер + панель, браузер откроется сам на http://127.0.0.1:8000:
    ```
-   python -m shorts run https://www.twitch.tv/videos/<id>
-   python -m shorts run D:\записи\stream.mp4
+   powershell -ExecutionPolicy Bypass -File scripts\run.ps1
    ```
-   Готовые ролики появятся в `work/<job>/renders/`.
+3. В панели: вставь ссылку на VOD (или путь к файлу) → «Нарезать». На странице задачи — график интереса,
+   карточки роликов: смотри, правь название, одобряй/отклоняй, сдвигай границы ±1 с с перерендером,
+   загружай одобренные на YouTube.
+
+По желанию в `config.yaml`:
+- `twitch.client_id` / `client_secret` (dev.twitch.tv → Your Console → Register Your Application) — клипы зрителей как сигнал;
+- `llm.provider` + API-ключ в переменной окружения — умный отбор, названия и хуки (без него — эвристика по чату).
+
+## YouTube
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → проект → включи **YouTube Data API v3**.
+2. OAuth consent screen: External, добавь свой аккаунт в Test users.
+3. Credentials → OAuth client ID → **Desktop app** → скачай JSON в корень проекта как `client_secret.json`.
+4. В панели на одобренном ролике — «подключи YouTube» (вход через Google), потом «Загрузить».
+   Ролики уходят как **private** (`youtube.privacy` в `config.yaml`), в описании `#shorts`.
+
+## Из командной строки
+
+```
+python -m shorts run https://www.twitch.tv/videos/<id>   # весь конвейер без панели
+python -m shorts run D:\записи\stream.mp4
+python -m server.queue --add <url>                        # поставить в очередь воркера
+python -m shorts.publish.youtube auth                     # подключить YouTube без панели
+```
+
+Готовые ролики — в `work/<job>/renders/`.
 
 ## Шаги по отдельности
 
@@ -33,6 +53,8 @@ python -m shorts render <job> m03_5123          # перерендерить о�
 ```
 
 ## Вебкамера
+
+Раскладка по умолчанию — `render.layout` в `config.yaml`; для IRL-стримов, где камера гуляет по кадру, ставь `layout: blur_bg` в профиль канала.
 
 При раскладке `cam_top` область камеры ищется автоматически и сохраняется в `profiles/<канал>.yaml`. Если угадало неверно, поправь вручную (доли кадра):
 
