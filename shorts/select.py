@@ -6,7 +6,19 @@ import os
 import re
 
 from .jobs import Job
-from .models import Candidate, ChatMessage, Clip, Moment, VodMeta, Word, from_dict, load_json, load_jsonl, load_list, save_json
+from .models import (
+    Candidate,
+    ChatMessage,
+    Clip,
+    Moment,
+    VodMeta,
+    Word,
+    from_dict,
+    load_json,
+    load_jsonl,
+    load_list,
+    save_json,
+)
 from .signals.chat import top_messages
 from .transcribe import words_between
 

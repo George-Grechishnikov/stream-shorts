@@ -18,7 +18,6 @@ from ..jobs import Job
 from ..models import ChatMessage, Clip, VodMeta, save_json, save_jsonl
 
 
-
 def is_url(s: str) -> bool:
     return s.startswith("http://") or s.startswith("https://")
 
@@ -36,7 +35,7 @@ def fetch_meta(url: str) -> tuple[VodMeta, dict]:
         channel=info.get("uploader_id") or info.get("uploader") or "",
         title=info.get("title") or "",
         duration=float(info.get("duration") or 0),
-        created_at=dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat() if ts else "",
+        created_at=dt.datetime.fromtimestamp(ts, dt.UTC).isoformat() if ts else "",
         width=int(info.get("width") or 0),
         height=int(info.get("height") or 0),
         fps=float(info.get("fps") or 0),
