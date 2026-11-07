@@ -88,6 +88,8 @@ def snap(words: list[Word], start: float, end: float, min_len: float, max_len: f
     ends = [a for a, b in gaps if b - a >= 0.25] + [words[-1].end]
     s = min(starts, key=lambda x: abs(x - start))
     e = min(ends, key=lambda x: abs(x - end) + (100 if x - s < min_len else 0) + (100 if x - s > max_len else 0))
+    if e - s < min_len:  # после s мало речи и подходящей паузы нет — тянем до min_len, а не отдаём огрызок
+        e = max(e, s + min_len)
     s, e = max(0.0, s - 0.15), e + 0.35
     if e - s > max_len:
         e = s + max_len
