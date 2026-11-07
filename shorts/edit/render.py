@@ -97,10 +97,15 @@ def render_moment(job: Job, m: Moment, meta: VodMeta, cfg: dict, layout: str | N
             layout = "blur_bg"
 
     vf, sub_mv = layout_filter(layout, W, H, cam, float(prof.get("cam_h", 0.36)))
-    ass = rd / f"{m.id}.ass"
+    # Субтитры вшиваются в видео; .ass не кладём рядом с <id>.mp4 — плееры (VLC, MPC) подхватывают
+    # одноимённый файл сами и показывают субтитры второй раз поверх вшитых.
+    ass_dir = job.p("ass")
+    ass_dir.mkdir(exist_ok=True)
+    ass = ass_dir / f"{m.id}.ass"
     ass.write_text(build_ass(m.words, m.start, dur, m.hook, W, H, sub_y=sub_mv), encoding="utf-8")
     fonts_rel = os.path.relpath(FONTS, rd).replace("\\", "/")
-    vf += f";[base]subtitles={ass.name}:fontsdir={fonts_rel}[v]"
+    ass_rel = os.path.relpath(ass, rd).replace("\\", "/")
+    vf += f";[base]subtitles={ass_rel}:fontsdir={fonts_rel}[v]"
     out = rd / f"{m.id}.mp4"
     enc = rc["encoder"] if rc["encoder"] != "h264_nvenc" or has_nvenc(ff) else "libx264"
     cmd = [ff, "-v", "error", "-y", "-ss", f"{ss:.2f}", "-t", f"{dur:.2f}", "-i", str(Path(inp).resolve()),
