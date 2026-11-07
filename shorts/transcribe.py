@@ -30,12 +30,36 @@ def merge_windows(cands: list[Candidate], pad: float, dur: float) -> list[tuple[
     return [(a, b) for a, b in out]
 
 
+def add_cuda_dll_dirs() -> None:
+    """Windows: CUDA-библиотеки из pip (nvidia-cublas-cu12, nvidia-cudnn-cu12) лежат в site-packages/nvidia/*/bin,
+    а ctranslate2 ищет cublas64_12.dll / cudnn*.dll через PATH."""
+    import os
+    import sys
+    from importlib.util import find_spec
+
+    if sys.platform != "win32":
+        return
+    spec = find_spec("nvidia")
+    if spec is None or not spec.submodule_search_locations:
+        return
+    from pathlib import Path
+
+    dirs = [str(b) for root in spec.submodule_search_locations for b in Path(root).glob("*/bin") if b.is_dir()]
+    for d in dirs:
+        os.add_dll_directory(d)
+    os.environ["PATH"] = os.pathsep.join([*dirs, os.environ.get("PATH", "")])
+
+
 def load_model(cfg: dict):
+    add_cuda_dll_dirs()
     from faster_whisper import WhisperModel
 
     w = cfg["whisper"]
     try:
-        return WhisperModel(w["model"], device=w["device"], compute_type=w["compute_type"])
+        model = WhisperModel(w["model"], device=w["device"], compute_type=w["compute_type"])
+        if w["device"] != "cpu":  # DLL cuBLAS/cuDNN грузятся лениво — проверяем сразу, а не посреди расшифровки
+            list(model.transcribe(np.zeros(16000, np.float32), language=w.get("language"))[0])
+        return model
     except Exception:  # нет CUDA → CPU
         return WhisperModel(w["model"] if w["device"] == "cpu" else "small", device="cpu", compute_type="int8")
 
