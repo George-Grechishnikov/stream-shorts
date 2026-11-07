@@ -4,5 +4,8 @@ yt-dlp>=2025.1.1
 requests>=2.31
 faster-whisper>=1.1
 opencv-python-headless>=4.9
+fastapi>=0.115       # веб-панель (server/app.py)
+uvicorn>=0.30
+httpx>=0.27          # TestClient в тестах панели
 anthropic>=0.40      # опционально, llm.provider=anthropic
 openai>=1.50         # опционально, llm.provider=openai

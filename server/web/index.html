@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stream-shorts</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f6f4; --card: #fff; --fg: #1b1b1a; --muted: #6b6b66; --line: #e3e2dd;
+  --accent: #6d4aff; --accent-fg: #fff; --ok: #1f8a4c; --bad: #c4372f; --warn: #b7791f; --run: #2563eb;
+  --pill: #ecebe7; --shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121211; --card: #1c1c1b; --fg: #ececea; --muted: #9a9a94; --line: #2c2c2a;
+          --accent: #8b70ff; --pill: #2a2a28; --ok: #3fb56d; --bad: #ef5a50; --warn: #e0a43a; --run: #5b8dff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 17px; margin: 0; }
+header .sp { flex: 1; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 60px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 16px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+input[type=text] { flex: 1; min-width: 220px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); padding: 10px 18px; }
+button.ok { color: var(--ok); } button.bad { color: var(--bad); }
+button.on.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+button.on.bad { background: var(--bad); border-color: var(--bad); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+button.sm { padding: 3px 8px; font-size: 13px; }
+.muted { color: var(--muted); } .small { font-size: 13px; }
+.err { color: var(--bad); }
+.jobs { margin-top: 18px; display: grid; gap: 10px; }
+.job { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center; }
+.job .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps { display: flex; gap: 4px; flex-wrap: wrap; }
+.step { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--pill); color: var(--muted); }
+.step.done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.step.running { background: color-mix(in srgb, var(--run) 20%, transparent); color: var(--run); animation: pulse 1.4s infinite; }
+.step.error { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.step.canceled { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+@keyframes pulse { 50% { opacity: .55; } }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--pill); }
+.badge.done { color: var(--ok); } .badge.error { color: var(--bad); } .badge.running, .badge.queued { color: var(--run); } .badge.canceled { color: var(--warn); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; margin-top: 14px; }
+.moment { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.moment.approved { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.moment.rejected { opacity: .55; }
+.moment video { width: 100%; aspect-ratio: 9/16; max-height: 72vh; background: #000; border-radius: 8px; object-fit: contain; }
+.moment input.t { min-width: 0; font-weight: 600; padding: 6px 8px; }
+.moment .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+.moment .txt { font-size: 12px; color: var(--muted); max-height: 3.6em; overflow: hidden; }
+.shift { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px 6px; align-items: center; font-size: 13px; }
+.rendering { color: var(--run); font-size: 13px; animation: pulse 1.4s infinite; }
+pre.log { max-height: 320px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; }
+.chartbox { position: relative; height: 220px; }
+h2 { font-size: 20px; margin: 0 0 4px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; max-width: 90vw; }
+.toast.show { opacity: 1; }
+details summary { cursor: pointer; color: var(--muted); }
+@media (max-width: 640px) { .job { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#/" style="color:inherit">✂ stream-shorts</a></h1>
+  <span class="sp"></span>
+  <span class="muted small" id="conn"></span>
+</header>
+<main id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const STEPS = ["ingest", "signals", "candidates", "transcribe", "select", "render"];
+const STEP_RU = {ingest: "загрузка", signals: "сигналы", candidates: "кандидаты", transcribe: "расшифровка", select: "отбор", render: "рендер"};
+const STATUS_RU = {queued: "в очереди", running: "идёт", done: "готово", error: "ошибка", canceled: "отменено"};
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const hms = t => { t = Math.max(0, Math.round(t)); return `${Math.floor(t / 3600)}:${String(Math.floor(t % 3600 / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
+
+function toast(msg, ms = 2600) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms); }
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {headers: {"Content-Type": "application/json"}, ...opts,
+                               body: opts.body ? JSON.stringify(opts.body) : undefined});
+  if (!r.ok) { let d = r.statusText; try { d = (await r.json()).detail || d; } catch {} throw new Error(d); }
+  $("#conn").textContent = "";
+  const ct = r.headers.get("content-type") || "";
+  return ct.includes("json") ? r.json() : r.text();
+}
+
+function stepsHtml(steps, errors = {}) {
+  return `<div class="steps">${STEPS.map(s => `<span class="step ${steps[s]}" title="${esc(errors[s] || STATUS_RU[steps[s]] || steps[s])}">${STEP_RU[s]}</span>`).join("")}</div>`;
+}
+
+// ------------------------------------------------------------------ роутер
+let timer = null, view = null;
+function route() {
+  clearTimeout(timer); if (view?.destroy) view.destroy();
+  const m = location.hash.match(/^#\/job\/([\w\-]+)/);
+  view = m ? jobPage(m[1]) : homePage();
+}
+addEventListener("hashchange", route);
+
+function poll(fn, ms) {
+  const tick = async () => { try { await fn(); } catch (e) { $("#conn").textContent = "нет связи с сервером"; } timer = setTimeout(tick, typeof ms === "function" ? ms() : ms); };
+  tick();
+}
+
+// ------------------------------------------------------------------ главная
+function homePage() {
+  $("#app").innerHTML = `
+    <form class="card row" id="f">
+      <input type="text" id="src" placeholder="Ссылка на VOD Twitch или путь к файлу (D:\\записи\\stream.mp4)" autocomplete="off">
+      <button class="primary" id="go">Нарезать</button>
+    </form>
+    <div class="jobs" id="jobs"><div class="muted">Загружаю…</div></div>`;
+  $("#f").onsubmit = async e => {
+    e.preventDefault();
+    const src = $("#src").value.trim(); if (!src) return;
+    $("#go").disabled = true;
+    try { const j = await api("/api/jobs", {method: "POST", body: {source: src}}); $("#src").value = ""; toast(`В очереди: ${j.id}`); await load(); }
+    catch (err) { toast(err.message, 5000); }
+    finally { $("#go").disabled = false; }
+  };
+  async function load() {
+    const jobs = await api("/api/jobs");
+    $("#jobs").innerHTML = jobs.length ? jobs.map(j => `
+      <div class="card job">
+        <div style="min-width:0">
+          <div class="row" style="gap:8px"><a class="title" href="#/job/${j.id}">${esc(j.title || j.source_url || j.id)}</a>
+            <span class="badge ${j.status}">${STATUS_RU[j.status] || j.status}</span></div>
+          <div class="muted small">${esc(j.channel || "")} · ${esc(j.id)} · ${esc(j.created_at.replace("T", " "))}</div>
+          ${j.error ? `<div class="err small">${esc(j.error)}</div>` : ""}
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          ${stepsHtml(j.steps, j.step_errors)}
+          ${j.active.length ? `<button class="sm" data-cancel="${j.id}">Отменить</button>`
+                            : (["error", "canceled"].includes(j.status) ? `<button class="sm" data-retry="${j.id}">Продолжить</button>` : "")}
+          <a href="#/job/${j.id}"><button class="sm">Открыть</button></a>
+        </div>
+      </div>`).join("") : `<div class="card muted">Пока пусто. Вставь ссылку на VOD — например https://www.twitch.tv/videos/…</div>`;
+  }
+  $("#jobs").onclick = async e => {
+    const c = e.target.dataset.cancel, r = e.target.dataset.retry;
+    try {
+      if (c) { await api(`/api/jobs/${c}/cancel`, {method: "POST"}); toast("Отменяю…"); }
+      if (r) { await api(`/api/jobs/${r}/retry`, {method: "POST", body: {force: false}}); toast("В очереди"); }
+      await load();
+    } catch (err) { toast(err.message, 5000); }
+  };
+  poll(load, 3000);
+  return {};
+}
+
+// ------------------------------------------------------------------ задача
+function jobPage(id) {
+  $("#app").innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div style="min-width:0"><a href="#/" class="small">← все задачи</a><h2 id="title">…</h2><div class="muted small" id="sub"></div></div>
+        <div class="row" id="actions"></div>
+      </div>
+      <div id="steps" style="margin-top:10px"></div>
+      <div id="errs" class="err small"></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="row" style="justify-content:space-between"><b>Интерес по времени</b><span class="muted small">клик по графику — к моменту</span></div>
+      <div class="chartbox"><canvas id="chart"></canvas></div>
+    </div>
+    <div class="row" style="margin-top:18px;justify-content:space-between">
+      <b id="mcount">Моменты</b>
+      <span class="muted small" id="mstat"></span>
+    </div>
+    <div class="grid" id="moments"></div>
+    <div class="card" style="margin-top:18px"><details id="logbox"><summary>Лог задачи</summary><pre class="log" id="log"></pre></details></div>`;
+
+  let chart = null, active = false, lastMoments = [];
+  const cards = new Map();
+
+  async function load() {
+    const j = await api(`/api/jobs/${id}`);
+    active = j.active.length > 0;
+    $("#title").textContent = j.title || j.meta?.title || j.id;
+    $("#sub").innerHTML = `${esc(j.channel || j.meta?.channel || "")} · ${esc(j.id)} · ${j.meta?.duration ? hms(j.meta.duration) : ""} · <span class="badge ${j.status}">${STATUS_RU[j.status] || j.status}</span>`
+      + (j.source_url?.startsWith("http") ? ` · <a href="${esc(j.source_url)}" target="_blank" rel="noopener">источник</a>` : "");
+    $("#steps").innerHTML = stepsHtml(j.steps, j.step_errors);
+    $("#errs").textContent = Object.entries(j.step_errors || {}).map(([s, e]) => `${STEP_RU[s] || s}: ${e}`).join(" · ");
+    $("#actions").innerHTML = (active ? `<button data-a="cancel">Отменить</button>` : "") + `
+      <select id="from">${STEPS.map(s => `<option value="${s}">${STEP_RU[s]}</option>`).join("")}</select>
+      <button data-a="retry" ${active ? "disabled" : ""}>Перезапустить с шага</button>`;
+    const firstNotDone = STEPS.find(s => j.steps[s] !== "done") || "select";
+    $("#from").value = firstNotDone;
+    renderMoments(j.moments);
+    if ($("#logbox").open) $("#log").textContent = await api(`/api/jobs/${id}/log?tail=300`);
+    if (!chart) drawChart(j.moments);
+  }
+
+  $("#actions").onclick = async e => {
+    const a = e.target.dataset.a; if (!a) return;
+    try {
+      if (a === "cancel") { await api(`/api/jobs/${id}/cancel`, {method: "POST"}); toast("Отменяю…"); }
+      if (a === "retry") { const step = $("#from").value; await api(`/api/jobs/${id}/retry`, {method: "POST", body: {step, force: true}}); toast(`Перезапуск с шага «${STEP_RU[step]}»`); chart?.destroy(); chart = null; }
+      await load();
+    } catch (err) { toast(err.message, 5000); }
+  };
+  $("#logbox").ontoggle = async () => { if ($("#logbox").open) $("#log").textContent = await api(`/api/jobs/${id}/log?tail=300`); };
+
+  async function drawChart(moments) {
+    const s = await api(`/api/jobs/${id}/signals`);
+    if (!s.t.length || !window.Chart) return;
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim(), ok = css.getPropertyValue("--ok").trim(), muted = css.getPropertyValue("--muted").trim(), line = css.getPropertyValue("--line").trim();
+    const top = Math.max(...s.score, 1);
+    const band = s.t.map(t => moments.some(m => t + s.bucket > m.start && t <= m.end) ? top : null);
+    chart = new Chart($("#chart"), {
+      type: "line",
+      data: {labels: s.t, datasets: [
+        {label: "интерес", data: s.score, borderColor: accent, backgroundColor: accent + "22", fill: true, pointRadius: 0, borderWidth: 1.5, tension: .2},
+        {label: "моменты", data: band, borderWidth: 0, backgroundColor: ok + "33", fill: "origin", pointRadius: 0, spanGaps: false, stepped: true},
+      ]},
+      options: {animation: false, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+        scales: {x: {ticks: {color: muted, maxTicksLimit: 12, callback: (v, i) => hms(s.t[i])}, grid: {color: line}},
+                 y: {ticks: {color: muted}, grid: {color: line}, beginAtZero: true}},
+        plugins: {legend: {labels: {color: muted, boxWidth: 12}}, tooltip: {callbacks: {title: it => hms(s.t[it[0].dataIndex])}}},
+        onClick: (_, els, c) => {
+          const x = c.scales.x.getValueForPixel(_.x); const t = s.t[Math.max(0, Math.min(s.t.length - 1, Math.round(x)))];
+          const m = lastMoments.reduce((b, m) => Math.abs((m.start + m.end) / 2 - t) < Math.abs((b.start + b.end) / 2 - t) ? m : b, lastMoments[0] || {});
+          if (m?.id) cards.get(m.id)?.el.scrollIntoView({behavior: "smooth", block: "center"});
+        }}
+    });
+  }
+
+  function renderStats() {
+    const ms = [...cards.values()].map(c => c.m);
+    const ok = ms.filter(m => m.approved === true).length, bad = ms.filter(m => m.approved === false).length;
+    $("#mcount").textContent = `Моменты (${ms.length})`;
+    $("#mstat").textContent = ms.length ? `одобрено ${ok} · отклонено ${bad} · не решено ${ms.length - ok - bad}` : "";
+  }
+
+  function renderMoments(ms) {
+    lastMoments = ms;
+    const grid = $("#moments");
+    if (!ms.length) { grid.innerHTML = `<div class="card muted">Моментов пока нет — появятся после шага «отбор».</div>`; cards.clear(); renderStats(); return; }
+    if (grid.firstElementChild && !grid.firstElementChild.classList.contains("moment")) grid.innerHTML = "";
+    const ids = new Set(ms.map(m => m.id));
+    for (const [mid, c] of cards) if (!ids.has(mid)) { c.el.remove(); cards.delete(mid); }
+    ms.forEach((m, i) => {
+      let c = cards.get(m.id);
+      if (!c) { c = makeCard(m); cards.set(m.id, c); }
+      updateCard(c, m);
+      if (grid.children[i] !== c.el) grid.insertBefore(c.el, grid.children[i] || null);
+    });
+    renderStats();
+  }
+
+  function makeCard(m) {
+    const el = document.createElement("div");
+    el.className = "card moment";
+    el.innerHTML = `
+      <video controls preload="none" playsinline></video>
+      <input type="text" class="t" maxlength="100" title="Название (Enter — сохранить)">
+      <div class="meta"><span class="time"></span><span class="score"></span></div>
+      <div class="txt"></div>
+      <div class="shift">
+        <span>начало</span><span class="s muted"></span><button class="sm" data-d="s-1">−1 с</button><button class="sm" data-d="s+1">+1 с</button>
+        <span>конец</span><span class="e muted"></span><button class="sm" data-d="e-1">−1 с</button><button class="sm" data-d="e+1">+1 с</button>
+      </div>
+      <div class="row">
+        <button class="ok" data-v="1">✓ Одобрить</button><button class="bad" data-v="0">✕ Отклонить</button>
+        <button class="sm" data-r="1" title="Перерендерить с текущими границами">↻</button>
+        <span class="rendering" hidden>рендер…</span>
+      </div>
+      <div class="pub row"></div>`;
+    const c = {el, m, src: null};
+    const t = $(".t", el);
+    t.onkeydown = e => { if (e.key === "Enter") t.blur(); if (e.key === "Escape") { t.value = c.m.title; t.blur(); } };
+    t.onblur = async () => {
+      const v = t.value.trim();
+      if (!v || v === c.m.title) { t.value = c.m.title; return; }
+      try { c.m = await api(`/api/jobs/${id}/moments/${c.m.id}`, {method: "PATCH", body: {title: v}}); toast("Название сохранено"); }
+      catch (err) { toast(err.message, 5000); t.value = c.m.title; }
+    };
+    el.onclick = async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      try {
+        if (b.dataset.v !== undefined) {
+          const want = b.dataset.v === "1";
+          const approved = c.m.approved === want ? null : want;   // повторный клик — снять решение
+          updateCard(c, await api(`/api/jobs/${id}/moments/${c.m.id}`, {method: "PATCH", body: {approved}}));
+        } else if (b.dataset.d) {
+          const [k, d] = [b.dataset.d[0], Number(b.dataset.d.slice(1))];
+          const r = await api(`/api/jobs/${id}/moments/${c.m.id}/rerender`, {method: "POST", body: k === "s" ? {start_delta: d} : {end_delta: d}});
+          updateCard(c, r.moment); toast("Границы сдвинуты, перерендер в очереди");
+        } else if (b.dataset.r) {
+          updateCard(c, (await api(`/api/jobs/${id}/moments/${c.m.id}/rerender`, {method: "POST", body: {}})).moment); toast("Перерендер в очереди");
+        } else if (b.dataset.pub && window.publish) { await window.publish(id, c, updateCard); }
+      } catch (err) { toast(err.message, 5000); }
+    };
+    return c;
+  }
+
+  function updateCard(c, m) {
+    c.m = m;
+    const el = c.el;
+    el.classList.toggle("approved", m.approved === true);
+    el.classList.toggle("rejected", m.approved === false);
+    const v = $("video", el);
+    if (m.video !== c.src) {
+      const playing = !v.paused; c.src = m.video;
+      if (m.video) { v.src = m.video; if (m.thumb) v.poster = m.thumb; } else v.removeAttribute("src");
+      if (playing) v.play().catch(() => {});
+    }
+    const t = $(".t", el);
+    if (document.activeElement !== t) t.value = m.title;
+    $(".time", el).textContent = `${hms(m.start)}–${hms(m.end)} · ${m.duration.toFixed(1)} с`;
+    $(".score", el).textContent = `score ${m.score}`;
+    $(".txt", el).textContent = m.text || "(речи нет)";
+    $(".txt", el).title = m.reason || "";
+    $(".s", el).textContent = hms(m.start); $(".e", el).textContent = hms(m.end);
+    $("[data-v='1']", el).classList.toggle("on", m.approved === true);
+    $("[data-v='0']", el).classList.toggle("on", m.approved === false);
+    $(".rendering", el).hidden = !m.rendering;
+    el.querySelectorAll("[data-d],[data-r]").forEach(b => b.disabled = m.rendering);
+    if (window.renderPublish) window.renderPublish($(".pub", el), m);
+    renderStats();
+  }
+
+  poll(load, () => active ? 3000 : 8000);
+  return {destroy() { chart?.destroy(); }};
+}
+
+route();
+</script>
+</body>
+</html>
