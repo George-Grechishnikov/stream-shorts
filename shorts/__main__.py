@@ -36,7 +36,14 @@ def main() -> None:
     elif a.cmd == "step":
         pipeline.run(a.job, cfg, steps=[a.step], force=a.force)
     elif a.cmd == "render":
-        render.run(open_job(cfg["work_dir"], a.job), cfg, only=a.moments or None)
+        job = open_job(cfg["work_dir"], a.job)
+        job.set_step("render", "running")  # job.json читает панель — статус как у обычного шага
+        try:
+            render.run(job, cfg, only=a.moments or None)
+        except Exception as e:
+            job.set_step("render", "error", error=str(e))
+            raise
+        job.set_step("render", "done")
 
 
 if __name__ == "__main__":
